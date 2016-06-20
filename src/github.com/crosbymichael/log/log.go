@@ -30,7 +30,8 @@ var currentlog Logger
 func Logf(level int, format string, v ...interface{}) {
 	if currentlog.level <= level {
 		if v != nil {
-			fmt.Println(format, v)
+			fmt.Printf(format, v)
+			fmt.Println("")
 		} else {
 			fmt.Println(format)
 		}
