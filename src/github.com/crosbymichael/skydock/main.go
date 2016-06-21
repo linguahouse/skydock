@@ -49,7 +49,7 @@ func initFunc() {
 	flag.IntVar(&ttl, "ttl", 60, "default ttl to use when registering a service")
 	flag.IntVar(&beat, "beat", 0, "heartbeat interval")
 	flag.IntVar(&numberOfHandlers, "workers", 3, "number of concurrent workers")
-	flag.StringVar(&pluginFile, "plugins", "/plugins/default.js", "file containing javascript plugins (plugins.js)")
+	flag.StringVar(&pluginFile, "plugins", "/plugins/rancher.js", "file containing javascript plugins (plugins.js)")
 
 	flag.Parse()
 
@@ -132,43 +132,21 @@ func heartbeat(uuid string, service *msg.Service) {
 
 	//var errorCount int
 	for _ = range time.Tick(time.Duration(beat) * time.Second) {
-		// THIS might lead to problems if we lost connectivity to skydns and the record expire there
-		//if errorCount > 10 {
-		//	// if we encountered more than 10 errors just quit
-		//	log.Logf(log.ERROR, "aborting heartbeat for %s after 10 errors", uuid)
-		//	return
-		//}
-
-		// don't fill logs if we have a low beat
-		// may need to do something better here
-		if beat >= 5 {
-			log.Logf(log.INFO, "updating ttl for (%s) %s ", uuid, service.Name)
+		// checking if the service exists after updating
+		_ , err2 := skydns.Get(uuid)
+		if err2 != nil {
+			log.Logf(log.ERROR, "The expected service is not registered in skydns. Trying to register service again: adding %s (%s) to skydns", uuid, service.Name)
+			if err := skydns.Add(uuid, service); err != nil {
+				log.Logf(log.ERROR, "Service (%s) %s  have not been addedd sucessfully. Error ", uuid, service.Name, err)
+			}
 		}
 
-		if err := updateService(uuid, ttl); err != nil {
-			//errorCount++
-			log.Logf(log.ERROR, "Problems with updating service (%s) %s : %s", uuid, service.Name, err)
-			//break
-
-			log.Logf(log.ERROR, "Trying to register service again: adding %s (%s) to skydns", uuid, service.Name)
-			if err := skydns.Add(uuid, service); err != nil {
-				// ignore erros for conflicting uuids and start the heartbeat again
-				//if err != client.ErrConflictingUUID {
-				//	return err
-				//}
-				log.Logf(log.INFO, "service already exists for %s. Resetting ttl.", uuid)
-				updateService(uuid, ttl)
-			}
-
-
-		}else{
-			// checking if the service exists
-			_ , err := skydns.Get(uuid)
+		err := updateService(uuid, ttl)
+		if beat >=30 {
 			if err != nil {
-				log.Logf(log.ERROR, "Update of the service hasn't worked. Trying to register service again: adding %s (%s) to skydns", uuid, service.Name)
-				if err := skydns.Add(uuid, service); err != nil {
-					updateService(uuid, ttl)
-				}
+				log.Logf(log.INFO, "updating ttl for (%s) %s  fialed. Err: %s", uuid, service.Name, err)
+			} else {
+				log.Logf(log.INFO, "updating ttl for (%s) %s succeed", uuid, service.Name)
 			}
 		}
 	}
@@ -210,16 +188,14 @@ func sendService(uuid string, service *msg.Service) error {
 	fmt.Printf("service.Name %s\n", service.Name)
 	fmt.Printf("uuid %s\n", uuid)
 	log.Logf(log.INFO, "adding %s (%s) to skydns", uuid, service.Name)
-	if err := skydns.Add(uuid, service); err != nil {
-		// ignore erros for conflicting uuids and start the heartbeat again
-		if err != client.ErrConflictingUUID {
-			return err
-		}
+	err := skydns.Add(uuid, service);
+	// ignore erros for conflicting uuids and start the heartbeat again
+	if err == client.ErrConflictingUUID {
 		log.Logf(log.INFO, "service already exists for %s. Resetting ttl.", uuid)
 		updateService(uuid, ttl)
 	}
 	go heartbeat(uuid, service)
-	return nil
+	return err
 }
 
 func removeService(uuid string) error {

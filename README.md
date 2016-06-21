@@ -1,5 +1,8 @@
 ### Skydock - Automagic Service Discovery for [Docker](https://github.com/dotcloud/docker)
-[![Build Status](https://travis-ci.org/crosbymichael/skydock.png)](https://travis-ci.org/crosbymichael/skydock)
+
+
+## BEFORE GO
+The main code is in directory ```src/github.com/crosbymichael/skydock```
 
 
 ## NOTICE
